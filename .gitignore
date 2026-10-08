@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+venv/
+.env
+.secret_key
+billing.db
+billing.db-wal
+billing.db-shm

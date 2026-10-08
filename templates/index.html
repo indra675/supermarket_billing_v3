@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Counter — Supermarket Billing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- ============ SIGN IN / FIRST-RUN SETUP ============ -->
+<div class="auth hidden" id="authScreen">
+  <form class="auth-card" id="authForm" autocomplete="on">
+    <div class="brand">
+      <span class="brand-mark">₹</span>
+      <div><h1>Counter</h1><p class="tag" id="authTag">Sign in to start billing.</p></div>
+    </div>
+    <div class="field-group"><label for="authUser">Username</label>
+      <input id="authUser" name="username" type="text" autocomplete="username" required /></div>
+    <div class="field-group"><label for="authPass">Password</label>
+      <input id="authPass" name="password" type="password" autocomplete="current-password" required /></div>
+    <div class="field-group hidden" id="authPass2Wrap"><label for="authPass2">Confirm password</label>
+      <input id="authPass2" type="password" autocomplete="new-password" /></div>
+    <button class="btn btn-primary" id="authBtn" type="submit">Sign in</button>
+    <p class="hint" id="authStatus"></p>
+  </form>
+</div>
+
+<div class="shell hidden" id="appRoot">
+
+  <header class="topbar no-print">
+    <div class="brand">
+      <span class="brand-mark">₹</span>
+      <div>
+        <h1>Counter</h1>
+        <p class="tag">Billing, kept on the record.</p>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="billing">Billing</button>
+      <button class="tab admin-only" data-tab="products">Products</button>
+      <button class="tab admin-only" data-tab="dashboard">Dashboard</button>
+      <button class="tab admin-only" data-tab="team">Team</button>
+    </nav>
+    <div class="whoami">
+      <span id="whoami"></span>
+      <button class="link-btn" id="pwBtn" type="button">Password</button>
+      <button class="link-btn" id="logoutBtn" type="button">Sign out</button>
+    </div>
+  </header>
+
+  <!-- ============ BILLING ============ -->
+  <main class="layout view" id="view-billing">
+
+    <section class="panel entry-panel no-print">
+      <div class="field-group">
+        <label for="customerName">Customer</label>
+        <input id="customerName" type="text" placeholder="Who's this bill for?" autocomplete="off" />
+      </div>
+
+      <div class="divider"><span>Add item</span></div>
+
+      <div class="item-form">
+        <div class="field">
+          <label for="itemName">Item name or barcode</label>
+          <input id="itemName" type="text" list="productList" placeholder="Type, pick, or scan…" autocomplete="off" />
+          <datalist id="productList"></datalist>
+        </div>
+        <div class="field small">
+          <label for="itemPrice">Price ₹</label>
+          <input id="itemPrice" type="number" min="0" step="0.01" placeholder="0.00" />
+        </div>
+        <div class="field small">
+          <label for="itemUnit">Unit</label>
+          <input id="itemUnit" type="text" placeholder="kg, pcs" autocomplete="off" />
+        </div>
+        <div class="field small">
+          <label for="itemQty">Qty</label>
+          <input id="itemQty" type="number" min="0" step="0.001" placeholder="1" />
+        </div>
+        <div class="field small">
+          <label for="itemGst">GST %</label>
+          <select id="itemGst">
+            {% for r in gst_rates %}<option value="{{ r }}">{{ r }}%</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <p class="hint stock-hint" id="stockHint"></p>
+
+      <button class="btn btn-primary" id="addItemBtn">Add to bill</button>
+      <p class="hint" id="addStatus"></p>
+
+      <div class="divider"><span>Discount &amp; payment</span></div>
+      <div class="item-form">
+        <div class="field small">
+          <label for="discountValue">Discount</label>
+          <input id="discountValue" type="number" min="0" step="0.01" placeholder="0" />
+        </div>
+        <div class="field small">
+          <label for="discountType">Type</label>
+          <select id="discountType"><option value="percent">%</option><option value="flat">₹ flat</option></select>
+        </div>
+        <div class="field">
+          <label for="paymentMethod">Payment</label>
+          <select id="paymentMethod">
+            {% for m in payment_methods %}<option>{{ m }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <p class="hint" id="discountHint"></p>
+
+      <div class="divider"><span>Actions</span></div>
+      <div class="stack-actions">
+        <button class="btn btn-primary" id="saveBillBtn">Save bill</button>
+        <button class="btn btn-ghost" id="printBtn">Print / PDF</button>
+        <button class="btn btn-ghost" id="downloadBtn">Download .txt</button>
+        <button class="btn btn-danger" id="clearBillBtn">New bill / clear</button>
+      </div>
+      <p class="hint" id="saveStatus"></p>
+    </section>
+
+    <section class="receipt-wrap" id="printArea">
+      <div class="receipt">
+        <div class="receipt-top">
+          <div class="receipt-store">COUNTER SUPERMARKET</div>
+          <div class="receipt-sub">Fresh goods, honest totals</div>
+        </div>
+        <div class="receipt-meta">
+          <div><span>Bill no</span><strong id="billNo">NEW</strong></div>
+          <div><span>Bill for</span><strong id="billCustomerLabel">—</strong></div>
+          <div><span>Date</span><strong id="billDate">—</strong></div>
+          <div><span>Cashier</span><strong id="billCashier">—</strong></div>
+          <div><span>Payment</span><strong id="billPayment">Cash</strong></div>
+        </div>
+        <div class="receipt-rule"></div>
+        <div class="receipt-cols">
+          <span>ITEM</span><span>QTY</span><span>PRICE</span><span>TOTAL</span>
+        </div>
+        <div id="itemsBody" class="receipt-items"></div>
+        <div id="emptyMsg" class="empty">No items yet — add something from the left.</div>
+        <div class="receipt-rule"></div>
+        <div class="receipt-line"><span>Subtotal</span><span id="subtotalVal">₹0.00</span></div>
+        <div class="receipt-line" id="discountLine"><span id="discountLabel">Discount</span><span id="discountVal">−₹0.00</span></div>
+        <div class="receipt-line"><span>GST</span><span id="taxVal">₹0.00</span></div>
+        <div class="receipt-total">
+          <span>TOTAL</span>
+          <strong id="grandTotal">₹0.00</strong>
+        </div>
+        <div class="receipt-foot">Thank you for shopping with us!</div>
+      </div>
+    </section>
+
+    <section class="panel history-panel no-print">
+      <div class="panel-head">
+        <h2 id="historyTitle">History</h2>
+        <span class="count-badge" id="historyCount">0</span>
+      </div>
+      <input id="historySearch" type="search" placeholder="Search name, item, or bill no…" autocomplete="off" />
+      <a class="link-btn admin-only" href="/api/bills/export.csv">Export all as CSV</a>
+      <div id="historyList" class="history-list">
+        <div class="empty">Loading…</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ PRODUCTS (admin) ============ -->
+  <main class="view hidden no-print" id="view-products">
+    <div class="products-layout">
+      <div>
+        <section class="panel">
+          <h2 class="panel-title" id="productFormTitle">Add product</h2>
+          <div class="field-group"><label for="pName">Name</label><input id="pName" type="text" autocomplete="off" /></div>
+          <div class="field-group"><label for="pSku">Barcode / SKU (optional)</label><input id="pSku" type="text" autocomplete="off" /></div>
+          <div class="item-form">
+            <div class="field small"><label for="pPrice">Price ₹</label><input id="pPrice" type="number" min="0" step="0.01" /></div>
+            <div class="field small"><label for="pUnit">Unit</label><input id="pUnit" type="text" placeholder="kg, pcs" /></div>
+            <div class="field small"><label for="pGst">GST %</label>
+              <select id="pGst">{% for r in gst_rates %}<option value="{{ r }}">{{ r }}%</option>{% endfor %}</select>
+            </div>
+            <div class="field small"><label for="pReorder">Reorder at</label><input id="pReorder" type="number" min="0" step="0.001" placeholder="0" /></div>
+            <div class="field" id="pStockField"><label for="pStock">Opening stock (blank = don't track)</label><input id="pStock" type="number" min="0" step="0.001" /></div>
+          </div>
+          <button class="btn btn-primary" id="saveProductBtn">Save product</button>
+          <button class="btn btn-ghost hidden" id="cancelProductBtn">Cancel edit</button>
+          <p class="hint" id="productStatus"></p>
+        </section>
+
+        <section class="panel hidden" id="stockPanel" style="margin-top:18px">
+          <h2 class="panel-title" id="stockTitle">Stock</h2>
+          <p class="hint" id="stockCurrent"></p>
+          <div class="item-form">
+            <div class="field small"><label for="sMode">Action</label>
+              <select id="sMode">
+                <option value="receive">Receive stock (+)</option>
+                <option value="remove">Write off / damaged (−)</option>
+                <option value="set">Set exact count</option>
+              </select></div>
+            <div class="field small"><label for="sQty">Quantity</label><input id="sQty" type="number" min="0" step="0.001" /></div>
+            <div class="field"><label for="sNote">Note (optional)</label><input id="sNote" type="text" maxlength="200" placeholder="Supplier delivery, stock count…" /></div>
+          </div>
+          <button class="btn btn-primary" id="applyStockBtn">Apply</button>
+          <button class="btn btn-ghost" id="closeStockBtn">Close</button>
+          <p class="hint" id="stockStatus"></p>
+          <div class="divider"><span>Recent movements</span></div>
+          <div id="movements" class="movements"></div>
+        </section>
+      </div>
+      <section class="panel">
+        <div class="panel-head"><h2>Catalog</h2><span class="count-badge" id="productCount">0</span></div>
+        <input id="productSearch" type="search" placeholder="Filter products…" autocomplete="off" />
+        <div id="productTable" class="product-table"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ============ DASHBOARD (admin) ============ -->
+  <main class="view hidden no-print" id="view-dashboard">
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="dash-layout">
+      <section class="panel">
+        <h2 class="panel-title">Last 7 days</h2>
+        <div class="bars" id="bars"></div>
+      </section>
+      <section class="panel">
+        <h2 class="panel-title">Top items by revenue</h2>
+        <div id="topItems"></div>
+        <h2 class="panel-title" style="margin-top:22px">Payment mix</h2>
+        <div id="payMix"></div>
+      </section>
+    </div>
+    <div class="dash-layout" style="margin-top:22px">
+      <section class="panel">
+        <h2 class="panel-title">Low stock</h2>
+        <div id="lowStock"></div>
+      </section>
+      <section class="panel">
+        <h2 class="panel-title">Sales by cashier</h2>
+        <div id="cashierSales"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ============ TEAM (admin) ============ -->
+  <main class="view hidden no-print" id="view-team">
+    <div class="products-layout">
+      <section class="panel">
+        <h2 class="panel-title">Add team member</h2>
+        <div class="field-group"><label for="uName">Username</label><input id="uName" type="text" autocomplete="off" /></div>
+        <div class="field-group"><label for="uPass">Temporary password (8+ chars)</label><input id="uPass" type="password" autocomplete="new-password" /></div>
+        <div class="field-group"><label for="uRole">Role</label>
+          <select id="uRole"><option value="cashier">Cashier</option><option value="admin">Admin</option></select></div>
+        <button class="btn btn-primary" id="addUserBtn">Create account</button>
+        <p class="hint" id="userStatus"></p>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Accounts</h2><span class="count-badge" id="userCount">0</span></div>
+        <div id="userTable" class="product-table"></div>
+      </section>
+    </div>
+  </main>
+
+</div>
+
+<dialog id="pwDialog">
+  <h2 class="panel-title" id="pwTitle">Change password</h2>
+  <div class="field-group" id="pwCurWrap"><label for="pwCur">Current password</label><input id="pwCur" type="password" autocomplete="current-password" /></div>
+  <div class="field-group"><label for="pwNew">New password (8+ chars)</label><input id="pwNew" type="password" autocomplete="new-password" /></div>
+  <button class="btn btn-primary" id="pwSave" type="button">Save password</button>
+  <button class="btn btn-ghost" id="pwCancel" type="button">Cancel</button>
+  <p class="hint" id="pwStatus"></p>
+</dialog>
+
+<div class="toast hidden" id="toast"></div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
